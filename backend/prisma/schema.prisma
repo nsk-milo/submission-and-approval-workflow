@@ -1,0 +1,90 @@
+// Prisma schema for the Procurement Request Approval workflow application.
+// Three entities: User, Application, AuditLog.
+//   User      1:N Application   (a user authors many procurement requests)
+//   Application 1:N AuditLog    (every status change appends one immutable record)
+//   User      1:N AuditLog      (the reviewer/applicant who performed the change)
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" for local dev; the musl target is for the Alpine Docker runtime.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  APPLICANT
+  REVIEWER
+}
+
+enum Category {
+  FINANCE
+  PROCUREMENT
+  TRAVEL
+  OPERATIONS
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  RETURNED_FOR_CHANGES
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         Role
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  applications Application[] @relation("UserApplications")
+  auditLogs    AuditLog[]    @relation("UserAuditLogs")
+
+  @@map("users")
+}
+
+model Application {
+  id          String            @id @default(uuid())
+  title       String
+  category    Category
+  description String?
+  amount      Decimal           @db.Decimal(14, 2)
+  status      ApplicationStatus @default(DRAFT)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  createdById String
+  createdBy   User   @relation("UserApplications", fields: [createdById], references: [id], onDelete: Cascade)
+
+  auditLogs AuditLog[] @relation("ApplicationAuditLogs")
+
+  @@index([status])
+  @@index([createdById])
+  @@map("applications")
+}
+
+// Append-only audit trail. Records are never updated or deleted; the service
+// layer only ever creates rows here, giving a complete chronological history.
+model AuditLog {
+  id            String             @id @default(uuid())
+  applicationId String
+  performedById String
+  oldStatus     ApplicationStatus?
+  newStatus     ApplicationStatus
+  comment       String?
+  createdAt     DateTime           @default(now())
+
+  application Application @relation("ApplicationAuditLogs", fields: [applicationId], references: [id], onDelete: Cascade)
+  performedBy User        @relation("UserAuditLogs", fields: [performedById], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("audit_logs")
+}
