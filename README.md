@@ -1,4 +1,4 @@
-# PACRA — Procurement Request Approval Workflow
+# Submission & Approvals WorkFlow — Procurement Request Approval Workflow
 
 A two-sided workflow application where **Applicants** submit procurement requests
 and **Reviewers** approve, reject, or return them for changes. The system's core
@@ -241,6 +241,81 @@ middleware is a UX guard, not the security boundary.
 - **Forms** use React Hook Form + Zod, mirroring the backend DTO rules
   (title required, category required, amount > 0) for instant client-side feedback,
   with the backend remaining authoritative.
+
+---
+
+## Trade-offs & what I'd add with more time
+
+These are conscious cuts made to keep the scope focused on the core requirement —
+**enforcing workflow transitions with a complete audit trail** — rather than gaps I
+didn't notice.
+
+**Auth & sessions**
+- The JWT is stored in `localStorage` and a parallel **role cookie** is set purely so
+  edge `middleware.ts` can gate routes (the edge can't read `localStorage`). This is
+  pragmatic but not ideal — an **httpOnly, secure, SameSite cookie** holding the token
+  would be safer against XSS. There are also no refresh tokens or token revocation; a
+  token is valid until it expires.
+- No registration / password-reset / rate-limiting on `/auth/login`. Users come from
+  the seed only.
+
+**Authorization**
+- Role + ownership checks are correct but spread across guards, the service, and the
+  state machine (defense in depth, but three places). A single policy/CASL layer would
+  centralise "who can do what to which record."
+
+**Data & audit**
+- `AuditLog` is append-only *by convention* (the service exposes only create/read).
+  With more time I'd enforce immutability at the DB level (revoke `UPDATE`/`DELETE`,
+  or a trigger) so it's tamper-evident, not just tamper-discouraged.
+- No pagination on the reviewer queue or audit trail — fine for a demo dataset, would
+  not scale. The queue filters/search run as DB queries but return all matches.
+- No soft-delete; `onDelete: Cascade` means deleting a user removes their applications
+  and audit history. For a real audit system I'd never hard-delete.
+
+**Frontend**
+- No optimistic updates — mutations refetch via TanStack Query invalidation, which is
+  simpler and always-consistent but shows a brief loading state.
+- Minimal accessibility passes and no end-to-end (Playwright) tests; correctness is
+  covered by backend unit + e2e tests, not UI tests.
+- No file attachments on requests, no email/notification on status change, no
+  reviewer assignment (any reviewer can action any request).
+
+**Ops**
+- The frontend isn't containerised (runs locally / on Vercel); only Postgres + backend
+  are in `docker-compose.yml`. No CI pipeline or healthcheck on the API itself.
+
+If I prioritised, the top three would be: **(1)** httpOnly cookie auth, **(2)**
+DB-enforced audit immutability, **(3)** pagination on the queue and audit trail.
+
+---
+
+## AI tools used
+
+**Full transparency: this project was built end-to-end in a single session with
+[Claude Code](https://claude.com/claude-code)** (Anthropic's agentic CLI), running the
+Opus model. The starting directory was empty; the backend, frontend, Docker setup,
+tests, and this README were all generated through that session. A summary of the build
+session is checked in at [sessions/session.md](sessions/session.md).
+
+How it was used, concretely:
+- **Scaffolding & implementation** — generating the NestJS modules (auth, applications,
+  workflow, audit-log), the Prisma schema + migration + seed, and the Next.js App
+  Router structure, then iterating on them.
+- **The core logic** — the `WorkflowStateMachine`, the transaction that pairs every
+  status change with an audit row, and the guard/service/state-machine authorization
+  layering were designed and written with the assistant.
+- **Tests** — the 16 unit specs for the state machine and the 13 Supertest e2e specs
+  were written with Claude and run to green.
+- **Debugging** — resolving the Prisma musl/Alpine engine target for Docker, the
+  React 19 / Next 15 peer-dependency pins, and the Postgres host-port clash (5434).
+- **Documentation** — this README and the session notes.
+
+Every generated step was reviewed and verified by running it — builds, the full test
+suite, `curl` smoke tests against the workflow, and the Docker container booting and
+serving — before being accepted (see the verification table in
+[sessions/session.md](sessions/session.md)). The design decisions documented above
+reflect choices I made and directed, not unreviewed output.
 
 ---
 
