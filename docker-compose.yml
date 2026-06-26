@@ -4,15 +4,15 @@ services:
     container_name: pacra-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: pacra
-      POSTGRES_PASSWORD: pacra
-      POSTGRES_DB: pacra
+      POSTGRES_USER: approvalWFL
+      POSTGRES_PASSWORD: approvalWFL
+      POSTGRES_DB: approvalWFL
     ports:
       - '5434:5432'
     volumes:
       - pacra-db:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U pacra -d pacra']
+      test: ['CMD-SHELL', 'pg_isready -U approvalWFL -d approvalWFL']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -26,8 +26,8 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: 'postgresql://pacra:pacra@postgres:5432/pacra?schema=public'
-      JWT_SECRET: 'change-me-in-production'
+      DATABASE_URL: 'postgresql://approvalWFL:approvalWFL@postgres:5432/approvalWFL?schema=public'
+      JWT_SECRET: 'b38e02a40052a5da17cc0d3b5ac89529a60c857793cd3fc86bed7de98a9ac43b'
       JWT_EXPIRES_IN: '1d'
       PORT: '4000'
       CORS_ORIGIN: 'http://localhost:3000'
@@ -35,4 +35,4 @@ services:
       - '4000:4000'
 
 volumes:
-  pacra-db:
+  approvalWFL-db:
